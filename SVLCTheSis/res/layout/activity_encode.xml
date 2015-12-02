@@ -1,0 +1,19 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+  	android:background="#003333"
+    android:orientation="vertical"
+    android:id="@+id/layoutmain"
+    tools:context="com.svlcthesis.activity.TransmitActivity" >
+
+    
+    <ImageView 
+        android:id="@+id/imv"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:scaleType="fitXY"
+        android:layout_gravity="center"
+        />
+
+</LinearLayout>

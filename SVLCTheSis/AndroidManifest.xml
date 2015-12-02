@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.svlcthesis"
+    android:versionCode="1"
+    android:versionName="1.0" >
+
+    <uses-sdk
+        android:minSdkVersion="16"
+        android:targetSdkVersion="21" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="SVLC"
+        android:theme="@style/AppTheme" >
+        <activity
+            android:name="com.svlcthesis.activity.MainActivity"
+            android:label="SVLC" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="com.svlcthesis.activity.ReceiverActivity"
+            android:label="Nhận Dữ Liệu"
+            android:screenOrientation="landscape" >
+        </activity>
+        <activity
+            android:name="com.svlcthesis.activity.RecoverData"
+            android:label="Recover Data" >
+        </activity>
+        <activity
+            android:name="com.svlcthesis.activity.TransmitActivity"
+            android:label="Mã Hóa Dữ Liệu" >
+        </activity>
+        <activity
+            android:name="com.svlc.hieptran.transmit.Thietlaptruyen"
+            android:label="@string/title_activity_thietlaptruyen"
+             >
+        </activity>
+        <activity
+            android:name="com.svlcthesis.activity.Thietlapnhan"
+            android:label="@string/title_activity_thietlapnhan" >
+        </activity>
+    </application>
+
+    <uses-feature android:name="android.hardware.camera" />
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.front"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.front.autofocus"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+</manifest>
