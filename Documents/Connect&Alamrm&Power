@@ -1,0 +1,190 @@
+################################# @PowerManagerment ##################################################
+- So với Linux: Trong kernel Android:
+		o Added 'on' state in the power state
+		o Added Early Suspend framework
+		o Added Partial Wake Lock mechanism
+- Power state: sleep, suspend.
+- App và services request tài nguyên CPU với wake locks qua Android Framework và native trong trạng thái power on.
+- Android PM Framework như là một driver connect với Android power driver qua JNI.
+- APMF cung cấp service cho user space qua PowerManager.
+- APM sử dụng bộ máy wake lock và timeouts để chuyển state của system power.
+- Quy trình acquire một wakelocs:
+1. Acquire handle to the PowerManager service by calling Context.getSystemService().
+2. Create a wake lock and specify the power management flags for screen, timeout, etc.
+3. Acquire wake lock.
+4. Perform operation such as play MP3.
+5. Release wake lock.
+ 	* @WakeLock
+			- App chạy trong Dalvik ngăn hệ thống đi vào sleep hay suspend state
+			- Không có wake locks CPU turned off ???
+		
+		- @AWAKE state
+			+ Khi từ Sleep và có các wakeupsource hoặc acquire full wake
+		- @KernelWakeLock
+			+ có một wake lock "main" giữ kernel awake. Khi toàn bộ wakelock release thì system nhảy vào suspend
+			+ Có những wake lock nằm dưới kernel được chuyển tiếp qua JNI qua Power.c (Keyboard)
+		- @WakeLocksWorking
+			+ Măc định thì một time out được set để off screen (Chắc là thời gian set trong thiết lập Screen).
+			+ Nếu FULL_WL hay SCREEN_BRIGHT_WL được giữ device sẽ k sleep.
+			+ Nếu không có wl nào được taken thì một request sẽ qua JNI để suspend device
+		- @PartialWakeLock
+			+ PWL được duy trì tại kernel không ở JAVA (arquire ở JAva)
+			+ 1 PWL ở Java được taken thì tương ứng có 1 PWL ở Kernel
+			+ Tất cả các PWL ở JAVA được protect bởi 1 Wakelock ở Kernel (@Timhieuxemnolacainao)
+			+ Nếu 1 PWL ở java, khi mà system try to go to sleep, android will ask the kernel to go to sleep
+			+ But kernel will check if a PARTIAL_WAKE_LOCK has been taken. If so it will not suspend the CPU
+			+ CPU could run at a reduced frequency/low power mode for running the background app
+				@Vidu:	Khi Play audio, một driver sẽ take một wake lock bên trong kernel, và kernel sẽ không suspend 						tiến trình này khi devices turned off
+		- @ReleasingWakeLock
+			+ WL được remove khỏi list
+			+ nếu PWL cuối cùng được release thì PMS cũng release luông wl ở kernel và đưa kernel vào trạng thái suspend, 				và setPowerState là stanby, được set trong mem.
+		- @EarlySuspend	
+			+ Mở roongjt ừ LPM Suspend Hook
+			+ Đươc sử dụng bở các drivers cần handle powermode setting cho device trước khi kernel được suspend
+			+ Được dùng để turn off screen và non-wakeup source input devices
+			+ Any driver can register its own early suspend and late_resume handler using register_early_suspend() API
+			+ Unregistration is done using unregister_early_suspend() API
+			+ When the system is brought to suspend mode, early suspend is called first. Depending on how the early suspend
+			hook is implemented, various things can be done
+							
+	SystemRunning --> early_suspend --> suspend --sleel--> SystemSuspended --wakeup--> resume --> late_resume --> SystemRunninh
+				@Vidu: vơi display driver thì ở early suspend thì screen có thể off, ở suspend thì closing driver.
+			@goToSleep
+				
+				1. Gọi hàm @goToSleep bởi @PMS
+				2. @sleep: setScreenStateLocked(false) -> setScreenState --> set_screen_state --> echo "mem" > /sys/power/state
+				3.@Inkernel @early_suspend -> Unlock @main_wake_lock --> nếu k còn wakelock --> @suspendedstate
+				
+			@PowerkeyPressed(interupt)
+					Qua PMS echo on vào state
+
+			@Note@SystemSleep
+				@gotoSleep() buộc release toàn bộ wakelock
+				@PowerState được set off
+					
+###################################@PMF trong Kernel#################################################
+        @Suspend-Resume Feature
+                @Sequence
+                        + 
+        
+################################### @Connectivity #####################################################
+
+  /**
+     * Sets a network sampling alarm.
+     */
+    void setAlarm(int timeoutInMilliseconds, PendingIntent intent) {
+        long wakeupTime = SystemClock.elapsedRealtime() + timeoutInMilliseconds;
+        int alarmType;
+        if (Resources.getSystem().getBoolean(
+                R.bool.config_networkSamplingWakesDevice)) { // Mặc định là set true
+            alarmType = AlarmManager.ELAPSED_REALTIME_WAKEUP; //Thời gian kể từ khi boot kể cả sleep sẽ wakeup device
+        } else {
+            alarmType = AlarmManager.ELAPSED_REALTIME; // không wake up device.
+        }
+        mAlarmManager.set(alarmType, wakeupTime, intent);
+// wakeupTime: (ms) - thời gian mà alarm should go off
+// Thời gian mặc định thường là từ 12 - 30 p
+// intent sẽ broadcast action khi mà alarm goes off
+	Log.d("HiepTHb","handleNetworkSamplingTimeout + setAlarm - with time " + wakeupTime + "s intent "+intent); 
+    }
+
+
+################################### @PowerManagerServices #####################################################
+
+@Kernel: Khi mà các PartialWL được acquire qua PMS.WL thì nó sẽ được add vào 1 list trong Kernel được bảo vệ bởi 1 PWL là PMS init trong kernel. Với FULL_WL thì nó sẽ set luôn PowerState là @ON, còn PWL thì mới nhảy xuống Kernel
+- 	Chạy ở Java layer
+		Khi power chạy thì khởi tạo 2 wakelocksuspendBlocker: 
+ 			 mWakeLockSuspendBlocker = createSuspendBlockerLocked("PowerManagerService.WakeLocks");
+  			 mDisplaySuspendBlocker = createSuspendBlockerLocked("PowerManagerService.Display");
+
+ 			private SuspendBlocker createSuspendBlockerLocked(String name) {
+        			SuspendBlocker suspendBlocker = new SuspendBlockerImpl(name);
+        			mSuspendBlockers.add(suspendBlocker);
+       				 return suspendBlocker;
+    				}
+
+* SuspenBlocker: 
+- Wake lock được thực hiện qua SuspenBlocker.
+- Có thể dược set từ user với 2 files trong sysfs: /sys/power/wake_lock , and
+wake_unlock (or, in older Android versions, /sys/android_power/acquire_partial_wake_lock and release_wake_lock ).
+- Trong 2 sysfs này thì chỉ có các system process mới có thể đọc ghi, các wakelocs yêu cầu bởi app không thực hiện được.
+- Thay đó, PMS sử dụng 4 suspend blockers sau:
+	+ PowerManagerService.WakeLocks: Sử dụng cho khi App yêu cầu một WakeLock
+	+ PowerManagerService.Display: Được sử dụng trong khi trạng thái của Display chuyển tiếp/thay đổi.
+	+ PowerManagerService.Broadcasts: Được sử dụng bên trong thành phần Notifier, sending broadcasts, để ngăn device suspending cho đến khi receiver có thể xử lý được.
+	+ PowerManagerService.WirelessChargerDetector
+- Additional suspend blockers used are
+radio-interface, SensorService, KeyEvents (owned by the InputManager's EventHub, GPS, and
+FLP (Fused Location Provider).
+* Các thông số trong Wakeup_sources:
+wakeup_sources provides information for all wakeup sources in the kernel - not just
+wakelocks.
+	+ name: tên của driver. với wakelock thì là tag được cung cấp bởi Framework
+	+ active_count: Số lần wake lock được active
+	+ event_count: Số lần mà wakeup source event được gây ra
+	+ wakeup_cout: Số lần mà wakeup_source buộc device wakeup, với wakelocks là 0????
+	+ expire_count: Số lần expried, wakelocks 0????
+	+ active_since Count in jiffies (timer ticks) specifying since when source was active
+	+ total_time Count in jiffies specifying total time source was active
+	+ max_time Max time this source has been continuously active
+	+ last_change Timestamp of when source activity was last changed
+	+ prevent_suspend_time How much time could have been saved in suspension if not for this source.
+	This is especially useful for figuring out the impact on battery life.
+
+
+* =>> Wakelocks:
+	Wakelocks mà được request từ app thì sẽ được obtain qua một đối tượng PowerManager. PMS sẽ giữ chúng trong 1 ArrayList.
+	Mỗi WakeLock đều chứa thông tin chi tiết của ứng dụng yêu cầu nó như PackageName,Owner UID/PID, Tag, and user specified 		flags. WakeLocs implement IBinder.DeathRecipient interface, sẽ cho phép PMS handleWakeLockDeath() và tự động remove wakelock 		việc calling app bị terminate hoặc crash mà không releasing nó. 
+
+* Responding to system events
+
+	- Khi mà systemReady trong SystemServer được gọi, PMS tạo một DisplayPowerController và đăng kí vào broadcast receivers, để thiết lập việc handler cho nhưng system events quan trọng. 
+	- Khi một trigger (khởi phát/khởi động) được phat hiện, PMS thiết lập 1 coressponding bít được gọi là mDirty
+-------------------------------------------Event sources possibly leading to update of system power state---------------------------
+ACTION_BATTERY_CHANGED 		BatteryService 		DIRTY_BATTERY_STATE (0x100)
+							DIRTY_IS_POWERED (0x40)
+ACTION_BOOT_COMPLETED 		ActivityManagerService 	DIRTY_BOOT_COMPLETED (0x10)
+ACTION_DREAMING_STARTED
+ACTION_DREAMING_STOPPED 	DreamController		N/A (schedules MSG_SANDMAN )
+ACTION_DOCK_EVENT 		DockObserver		DIRTY_DOCK_STATE (0x800)
+ACTION_USER_SWITCHED 		ActivityManagerService	DIRTY_SETTINGS (0x20) on change
+SCREENSAVER_ENABLED,
+SCREENSAVER_ACTIVATE_ON_SLEEP,
+SCREENSAVER_ACTIVATE_ON_DOCK
+STAY_ON_WHILE_PLUGGED_IN
+Settings.Secure.*
+SCREEN_BRIGHTNESS,
+SCREEN_BRIGHTNESS_MODE,
+SCREEN_OFF_TIMEOUT
+DIRTY_SETTINGS (0x20) on change
+DIRTY_STAY_ON (0x80) if set
+DIRTY_SETTINGS (0x20) on change
+onProximityPositive callback DisplayPowerController DIRTY_PROXIMITY_POSITIVE (0x200)
+Wakelock holder death WakeLock.binderDied()
+DIRTY_WAKE_LOCKS (0x01)
+Internal wakefulness state wakeUp()
+goToSleep()
+nap()
+DIRTY_WAKEFULNESS (0x02)
+User Activity
+IPowerManager call #7
+Native code
+DIRTY_USER_ACTIVITY (0x04)
+________________________________________________________________________________________________________________________________
+
+	- PMS sử dụng broadcast receivers và notifications để handler việc tạo ra trạng thái "Informal"
+	-  
+
+################################################@BatteryService############################################################
+
+
+
+############################################## @AlamrManager #########################################
+
+	@rtc_driver: cung cấp các fucntion wakeup device
+	@alarm_driver: thực ra là một virtual driver --> call @rtc_driver.	
+	- Android alarm maanager dùng RTC hw để @wake_up từ @suspend_state
+	- @RTC0,@RTC1 là các sys file của RTC, việc thiết lập @wake_up thường là echo trong các sys_file
+	
+@rtc_driver: 
+	
